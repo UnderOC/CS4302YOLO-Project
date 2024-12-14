@@ -2,3 +2,7 @@ pytorch-probe/
 pytorch/
 
 *.zip
+*.pt
+*.jpg
+*.txt
+*cache*
