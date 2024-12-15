@@ -422,6 +422,7 @@ def run(
     if not training:
         shape = (batch_size, 3, imgsz, imgsz)
         LOGGER.info(f"Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {shape}" % t)
+        LOGGER.info(f"{t}") 
 
     # Plots
     if plots:

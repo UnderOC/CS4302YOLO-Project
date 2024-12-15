@@ -1,6 +1,8 @@
 pytorch-probe/
 pytorch/
 
+
+datasets
 *.zip
 *.pt
 *.jpg

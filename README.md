@@ -29,16 +29,16 @@ conda install cuda cuda-nvcc -c nvidia/label/cuda-11.6.0
 Compile pytorch
 ```bash
 
-make clean
+# make clean
 
 # export CUDA_HOME=$CONDA_PREFIX
 # export PATH=$CONDA_PREFIX/bin:$PATH
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 export LDFLAGS="-L$CONDA_PREFIX/lib $LDFLAGS"
 
-# export TRACE_KERNEL=1
-# export USE_CUDNN=0
-# EXPORT DEBUG=1
+export TRACE_KERNEL=1
+export USE_CUDNN=1
+export DEBUG=1
 
 export CMAKE_LIBRARY_PATH=$CONDA_PREFIX/lib:$CMAKE_LIBRARY_PATH
 export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
@@ -94,7 +94,7 @@ NVIDIA GeForce RTX 3080 Ti
 # Run Yolo
 
 ```bash
-
+cd yolov5
 # It will automatically download weights, dataset, update python library version.
 python val.py --weights yolov5s.pt --data coco128.yaml --img 640
 
