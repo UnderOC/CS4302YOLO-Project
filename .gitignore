@@ -1,4 +1,7 @@
 pytorch-probe/
 pytorch/
+datasets/
+vision/
 
 *.zip
+*.txt
