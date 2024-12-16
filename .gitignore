@@ -2,6 +2,7 @@ pytorch-probe/
 pytorch/
 datasets/
 vision/
+yolov5/runs/
 
 *.zip
 *.txt
