@@ -58,7 +58,45 @@ If you don't want to compile from source code
 conda install pytorch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0 cudatoolkit=11.6 -c pytorch -c conda-forge
 ```
 
-Check correctness
+## Quick Start
+You can use `yolo_setup.sh` to create a conda environment. Modify the CUDA version in line 30-36 to fit your gpu version. 
+```bash
+chmod +x yolo_setup.sh
+./yolo_setup.sh
+```
+
+Compile torch
+```bash
+conda activate yolov5
+cd pytorch
+python setup.py install 
+```
+
+Install torchvision
+```bash
+cd ..
+git clone --single-branch -b release/0.13 https://github.com/pytorch/vision
+cd vision
+python setup.py install
+```
+
+Install dependencies for yolov5 (the torch and torchvision depencencies in `requirements.txt` are commented out)
+```bash
+cd yolov5
+pip install -r requirements.txt
+```
+
+The folder structure should be like this after the environment setup:
+- `CS4302YOLO-Project`
+  - `pytorch`
+  - `vision`
+  - `yolov5`
+
+Troubleshooting: The following commands may help when you encounter errors.
+- `export TORCH_CUDA_ARCH_LIST="8.6"`
+- `conda install pillow`
+
+## Check correctness
 ```bash
 cd .. # don't run python in the pytorch directory, due to name conflict of 'torch'
 
@@ -89,6 +127,10 @@ tensor([[  0,   1,   4,   9,  16,  25],
         [144, 169, 196, 225, 256, 289]], device='cuda:0')
 >>> print(torch.cuda.get_device_name(0))
 NVIDIA GeForce RTX 3080 Ti
+>>> print(torch.__version__)
+1.12.0a0+git8c4ef23
+>>> print(torchvision.__version__)
+0.13.1a0+bddbd7e
 ```
 
 # Run Yolo
