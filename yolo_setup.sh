@@ -10,11 +10,11 @@ echo "Initializing Conda..."
 source "$(conda info --base)/etc/profile.d/conda.sh"
 
 # Create the conda environment with Python 3.8
-echo "Creating conda environment 'yolo' with Python 3.8..."
+echo "Creating conda environment 'yolov5' with Python 3.8..."
 conda create -n yolov5 python=3.8
 
 # Activate the newly created environment
-echo "Activating conda environment 'yolo'..."
+echo "Activating conda environment 'yolov5'..."
 conda activate yolov5
 
 # Install the required packages
@@ -54,18 +54,4 @@ echo "Verifying package locations..."
 which gcc
 which g++
 
-# Set additional environment variables
-echo "Setting additional environment variables..."
-export CUDA_HOME=$CONDA_PREFIX
-export PATH=$CONDA_PREFIX/bin:$PATH
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-export LDFLAGS="-L$CONDA_PREFIX/lib $LDFLAGS"
-export CUDA_NVCC_EXECUTABLE=$(which nvcc)
-
-export CMAKE_LIBRARY_PATH=$CONDA_PREFIX/lib:$CMAKE_LIBRARY_PATH
-export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
-
-export TRACE_KERNEL=1
-export USE_CUDNN=0
-
-echo "Conda environment 'yolo' setup completed successfully."
+echo "Conda environment 'yolov5' setup completed successfully."

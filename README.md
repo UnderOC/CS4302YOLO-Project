@@ -65,6 +65,22 @@ chmod +x yolo_setup.sh
 ./yolo_setup.sh
 ```
 
+Set additional environment variables (Use `echo $` to check the variables)
+```bash
+conda activate yolov5
+export CUDA_HOME=$CONDA_PREFIX
+export PATH=$CONDA_PREFIX/bin:$PATH
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+export LDFLAGS="-L$CONDA_PREFIX/lib $LDFLAGS"
+export CUDA_NVCC_EXECUTABLE=$(which nvcc)
+
+export CMAKE_LIBRARY_PATH=$CONDA_PREFIX/lib:$CMAKE_LIBRARY_PATH
+export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+
+export TRACE_KERNEL=1
+export USE_CUDNN=0
+```
+
 Compile torch
 ```bash
 conda activate yolov5
