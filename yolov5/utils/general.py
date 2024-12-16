@@ -210,6 +210,7 @@ class Profile(contextlib.ContextDecorator):
         """Measures and returns the current time, synchronizing CUDA operations if `cuda` is True."""
         if self.cuda:
             torch.cuda.synchronize(self.device)
+        # return time.perf_counter()
         return time.time()
 
 

@@ -29,12 +29,16 @@ conda install cuda cuda-nvcc -c nvidia/label/cuda-11.6.0
 Compile pytorch
 ```bash
 
-make clean
+# make clean
 
 # export CUDA_HOME=$CONDA_PREFIX
 # export PATH=$CONDA_PREFIX/bin:$PATH
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 export LDFLAGS="-L$CONDA_PREFIX/lib $LDFLAGS"
+
+export TRACE_KERNEL=1
+export USE_CUDNN=1
+export DEBUG=1
 
 export CMAKE_LIBRARY_PATH=$CONDA_PREFIX/lib:$CMAKE_LIBRARY_PATH
 export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
@@ -44,9 +48,15 @@ python setup.py install
 
 ```
 
+
 Troubleshooting: The following commands may help when you encounter errors.
 - `export CUDA_NVCC_EXECUTABLE=$(which nvcc)`
 - `conda install libcusparse-dev -c nvidia/label/cuda-11.6.0` `conda install libcusolver-dev -c nvidia/label/cuda-11.6.0` 
+
+If you don't want to compile from source code
+```bash
+conda install pytorch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0 cudatoolkit=11.6 -c pytorch -c conda-forge
+```
 
 Check correctness
 ```bash
@@ -79,4 +89,25 @@ tensor([[  0,   1,   4,   9,  16,  25],
         [144, 169, 196, 225, 256, 289]], device='cuda:0')
 >>> print(torch.cuda.get_device_name(0))
 NVIDIA GeForce RTX 3080 Ti
+```
+
+# Run Yolo
+
+```bash
+cd yolov5
+# It will automatically download weights, dataset, update python library version.
+python val.py --weights yolov5s.pt --data coco128.yaml --img 640
+
+
+# Output looks like:
+
+# val: data=/TinyNAS2024/wjxie/pdc/yolov5/data/coco128.yaml, weights=['yolov5s.pt'], batch_size=32, imgsz=640, conf_thres=0.001, iou_thres=0.6, max_det=300, task=val, device=, workers=8, single_cls=False, augment=False, verbose=False, save_txt=False, save_hybrid=False, save_conf=False, save_json=False, project=runs/val, name=exp, exist_ok=False, half=False, dnn=False
+# YOLOv5 🚀 2024-12-10 Python-3.8.20 torch-1.12.0 CUDA:0 (NVIDIA GeForce RTX 3080 Ti, 12054MiB)
+# 
+# Fusing layers...
+# YOLOv5s summary: 213 layers, 7225885 parameters, 0 gradients
+# val: Scanning /TinyNAS2024/wjxie/pdc/datasets/coco128/labels/train2017.cache... 126 images, 2 backgrounds, 0 corrupt: 100%|██████████| 128/128 [00:                 Class     Images  Instances          P          R      mAP50   mAP50-95: 100%|██████████| 4/4 [00:06<00:00,  1.58s/it]
+#                    all        128        929      0.712      0.634      0.713      0.475
+# Speed: 0.5ms pre-process, 3.1ms inference, 5.6ms NMS per image at shape (32, 3, 640, 640)
+# Results saved to runs/val/exp7
 ```

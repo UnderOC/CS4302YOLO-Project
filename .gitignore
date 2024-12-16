@@ -4,5 +4,11 @@ datasets/
 vision/
 yolov5/runs/
 
+
+datasets
 *.zip
 *.txt
+*.pt
+*.jpg
+*.txt
+*cache*
