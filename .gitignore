@@ -3,6 +3,7 @@ pytorch/
 datasets/
 vision/
 yolov5/runs/
+log/
 
 
 datasets
