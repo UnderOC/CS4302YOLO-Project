@@ -79,6 +79,7 @@ export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
 
 export TRACE_KERNEL=1
 export USE_CUDNN=0
+export DEBUG=1
 ```
 
 Compile torch
@@ -168,4 +169,213 @@ python val.py --weights yolov5s.pt --data coco128.yaml --img 640
 #                    all        128        929      0.712      0.634      0.713      0.475
 # Speed: 0.5ms pre-process, 3.1ms inference, 5.6ms NMS per image at shape (32, 3, 640, 640)
 # Results saved to runs/val/exp7
+```
+
+## Run with Profiler and Kernel Count
+Import `torch.autograd.profiler` to measure the time and memory consumption of the model’s operators, see `yolov5/val.py`.
+```python
+import torch.autograd.profiler as profiler
+
+# in function run
+with profiler.profile(with_stack=True, profile_memory=True) as prof:
+        for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
+                ...
+print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=20))
+```
+
+Modify `python/tools/kernel_count.py` to output the use of kernels in decending order:
+```python
+def main():
+    # Execute the provided Python script and redirect output to run.log
+    cmd = 'python ' + sys.argv[1] + ' > run.log'
+    os.system(cmd)
+    
+    kernel_count = {}
+    
+    # Parse run.log to count kernel occurrences
+    with open('run.log', encoding='utf-8') as log_file:
+        for line in log_file:
+            info_idx = line.find("$dispatch kernel")
+            if info_idx != -1:
+                line = line[info_idx:]
+                parts = line.split()
+                if len(parts) >= 3:
+                    kernel_name = parts[2]
+                    if kernel_name in kernel_count:
+                        kernel_count[kernel_name] += 1
+                    else:
+                        kernel_count[kernel_name] = 1
+    
+    # Sort kernel counts by descending order and write to ordered_kernel.txt
+    sorted_kernels = sorted(kernel_count.items(), key=lambda x: x[1], reverse=True)
+    with open('ordered_kernel.txt', 'w', encoding='utf-8') as ord_file:
+        for name, count in sorted_kernels:
+            ord_file.write(f"{name} : {count}\n")
+```
+
+Run the valuation process:
+```bash
+python pytorch/tools/kernel_count/kernel_count.py yolov5/val.py --weights yolov5s.pt --data coco128.yaml --img 640
+```
+
+The output of kernel_count is in `ordered_kernel.txt`:
+```
+"copy_" : 6150
+"fill_out" : 3889
+"ufunc_add_CUDA" : 3596
+"index_cuda" : 3518
+"_local_scalar_dense_cuda" : 3424
+"copy_kernel" : 2144
+"nonzero_cuda" : 1896
+"div_true_cuda" : 1640
+"cat_cuda" : 1615
+"clamp_min_scalar_cuda" : 1268
+"ge_cuda" : 1260
+"bitwise_and_cuda" : 1260
+"prod_cuda" : 754
+"add_stub" : 617
+"fill_cpu" : 606
+"_local_scalar_dense_cpu" : 567
+"check_convert" : 511
+"index_put" : 508
+"mul_cuda" : 402
+"gt_cuda" : 384
+"slow_conv2d_cuda" : 336
+"silu_cuda" : 319
+"eq_cuda" : 254
+"min_elementwise_cuda" : 252
+"max_elementwise_cuda" : 252
+"fill_cuda" : 249
+"div_cpu" : 193
+"sort" : 170
+"index_select_cuda" : 128
+"index_select_out_cuda_impl" : 128
+"arange_cuda" : 120
+"check_uniform_bounds" : 114
+"uniform_kernel_cpu" : 114
+"sqrt_cuda" : 114
+"addmm_cuda" : 114
+...
+```
+
+The output of profiler is in `run.log`:
+```
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ---------------------------------------------------------------------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  Source Location                                                              
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ---------------------------------------------------------------------------  
+enumerate(DataLoader)#_MultiProcessingDataLoaderIter...         6.48%     207.151ms         6.48%     207.161ms     207.161ms          -4 b        -292 b           0 b           0 b             1  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     site-packages/tqdm/std.py(1160): __iter__                                    
+                                                                                                                                                                                                     utils/dataloaders.py(240): __iter__                                          
+                                                                                                                                                                                                                                                                                  
+                                            aten::copy_         4.12%     131.685ms         4.12%     131.685ms       2.058ms           0 b           0 b           0 b           0 b            64  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/plots.py(139): output_to_target                                        
+                                                                                                                                                                                                     <built-in method __enter__ of _thread.lock object at 0x7f5791e68270>         
+                                                                                                                                                                                                                                                                                  
+                             aten::_slow_conv2d_forward         4.12%     131.534ms         7.35%     234.796ms     978.317us           0 b           0 b      11.31 Gb      -1.12 Gb           240  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     nn.Module: DetectMultiBackend                                                
+                                                                                                                                                                                                     models/common.py(679): forward                                               
+                                                                                                                                                                                                                                                                                  
+                                             aten::sort         3.40%     108.706ms         3.40%     108.779ms     108.779ms           0 b           0 b      27.00 Kb      18.00 Kb             1  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(1012): non_max_suppression                                  
+                                                                                                                                                                                                     <built-in method acquire of _thread.lock object at 0x7f5791ef03c0>           
+                                                                                                                                                                                                                                                                                  
+                                            aten::index         3.22%     103.066ms         4.87%     155.657ms     202.678us           0 b           0 b      64.95 Mb      -1.25 Mb           768  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(1012): non_max_suppression                                  
+                                                                                                                                                                                                                                                                                  
+                                          aten::nonzero         3.06%      97.684ms         4.11%     131.310ms     104.214us           0 b           0 b     584.50 Kb           0 b          1260  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     yolov5/val.py(145): process_batch                                            
+                                                                                                                                                                                                     <built-in method where of type object at 0x7f574e84ea60>                     
+                                                                                                                                                                                                                                                                                  
+                                              aten::cat         3.01%      96.074ms         3.80%     121.325ms     106.425us           0 b           0 b     574.50 Kb     574.50 Kb          1140  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     yolov5/val.py(145): process_batch                                            
+                                                                                                                                                                                                     <built-in method cat of type object at 0x7f574e84ea60>                       
+                                                                                                                                                                                                                                                                                  
+                                            aten::index         2.73%      87.183ms         3.63%     115.911ms     101.676us           0 b           0 b     570.00 Kb           0 b          1140  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     yolov5/val.py(145): process_batch                                            
+                                                                                                                                                                                                                                                                                  
+                              aten::_local_scalar_dense         2.67%      85.325ms         2.67%      85.325ms      24.920us           0 b           0 b           0 b           0 b          3424  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/metrics.py(134): process_batch                                         
+                                                                                                                                                                                                                                                                                  
+                                               aten::ge         2.58%      82.571ms         2.58%      82.571ms      65.533us           0 b           0 b       2.60 Mb       2.60 Mb          1260  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     yolov5/val.py(145): process_batch                                            
+                                                                                                                                                                                                                                                                                  
+                                            aten::copy_         2.39%      76.280ms         2.39%      76.280ms      60.063us           0 b           0 b           0 b           0 b          1270  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(955): scale_boxes                                           
+                                                                                                                                                                                                                                                                                  
+                                            aten::copy_         2.29%      73.159ms         2.29%      73.159ms     142.889us           0 b           0 b           0 b           0 b           512  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(1012): non_max_suppression                                  
+                                                                                                                                                                                                     ....13.1a0+bddbd7e-py3.8-linux-x86_64.egg/torchvision/ops/boxes.py(13): nms  
+                                                                                                                                                                                                                                                                                  
+                                              aten::cat         2.27%      72.579ms         2.27%      72.579ms      63.666us           0 b           0 b     584.50 Kb     584.50 Kb          1140  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     yolov5/val.py(145): process_batch                                            
+                                                                                                                                                                                                     <built-in method stack of type object at 0x7f574e84ea60>                     
+                                                                                                                                                                                                                                                                                  
+                                      aten::bitwise_and         2.02%      64.663ms         2.02%      64.663ms      51.320us           0 b           0 b       2.60 Mb       2.60 Mb          1260  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     yolov5/val.py(145): process_batch                                            
+                                                                                                                                                                                                                                                                                  
+                                            aten::copy_         1.90%      60.873ms         1.90%      60.873ms      20.291ms           0 b           0 b           0 b           0 b             3  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/plots.py(139): output_to_target                                        
+                                                                                                                                                                                                     <built-in method clone of Tensor object at 0x7f5791ee16d0>                   
+                                                                                                                                                                                                                                                                                  
+                                           aten::select         1.90%      60.579ms         2.71%      86.536ms       5.612us           0 b           0 b           0 b           0 b         15420  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     nn.Module: DetectMultiBackend                                                
+                                                                                                                                                                                                     models/common.py(679): forward                                               
+                                                                                                                                                                                                                                                                                  
+                                     aten::index_select         1.74%      55.745ms         1.80%      57.374ms     448.234us           0 b           0 b       3.65 Mb           0 b           128  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(1012): non_max_suppression                                  
+                                                                                                                                                                                                     ....13.1a0+bddbd7e-py3.8-linux-x86_64.egg/torchvision/ops/boxes.py(13): nms  
+                                                                                                                                                                                                                                                                                  
+                                            aten::copy_         1.52%      48.680ms         1.52%      48.680ms      76.062us           0 b           0 b           0 b           0 b           640  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(1012): non_max_suppression                                  
+                                                                                                                                                                                                     utils/general.py(885): xywh2xyxy                                             
+                                                                                                                                                                                                                                                                                  
+                                              aten::add         1.30%      41.634ms         1.30%      41.634ms     162.633us           0 b           0 b       5.50 Mb       5.50 Mb           256  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(1012): non_max_suppression                                  
+                                                                                                                                                                                                                                                                                  
+                                           aten::clamp_         1.28%      41.037ms         1.33%      42.358ms      41.691us           0 b           0 b           0 b           0 b          1016  yolov5/val.py(586): main                                                     
+                                                                                                                                                                                                     site-packages/torch/autograd/grad_mode.py(27): decorate_context              
+                                                                                                                                                                                                     yolov5/val.py(331): run                                                      
+                                                                                                                                                                                                     utils/general.py(955): scale_boxes                                           
+                                                                                                                                                                                                     utils/general.py(990): clip_boxes                                            
+                                                                                                                                                                                                                                                                                  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ---------------------------------------------------------------------------  
+Self CPU time total: 3.196s
 ```
