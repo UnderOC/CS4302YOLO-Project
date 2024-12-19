@@ -28,7 +28,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.autograd.profiler as profiler
+# import torch.autograd.profiler as profiler
+from torch.profiler import profile, record_function, ProfilerActivity
 from tqdm import tqdm
 
 FILE = Path(__file__).resolve()
@@ -328,11 +329,17 @@ def run(
     callbacks.run("on_val_start")
     pbar = tqdm(dataloader, desc=s, bar_format=TQDM_BAR_FORMAT)  # progress bar
 
-    with profiler.profile(
-        #enabled=False,
-        with_stack=True, 
-        profile_memory=True,
-    ) as prof:
+
+    if torch.cuda.is_available():
+        device_prof = 'cuda'
+    # with profiler.profile(
+    #     #enabled=False,
+    #     with_stack=True, 
+    #     profile_memory=True,
+    # ) as prof:
+    activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+    sort_by_keyword = device_prof + "_time_total"
+    with profile(activities=activities, record_shapes=True) as prof:
         for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
             callbacks.run("on_val_batch_start")
             with dt[0]:
@@ -405,7 +412,8 @@ def run(
 
             callbacks.run("on_val_batch_end", batch_i, im, targets, paths, shapes, preds)
 
-    print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=20))
+    print(prof.key_averages().table(sort_by=sort_by_keyword, row_limit=20))
+    # print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=40))
     # print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=20))
 
     # Compute metrics
