@@ -172,17 +172,6 @@ python val.py --weights yolov5s.pt --data coco128.yaml --img 640
 ```
 
 ## Run with Profiler and Kernel Count
-Import `torch.autograd.profiler` to measure the time and memory consumption of the model’s operators, see `yolov5/val.py`.
-```python
-import torch.autograd.profiler as profiler
-
-# in function run
-with profiler.profile(with_stack=True, profile_memory=True) as prof:
-        for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
-                ...
-print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=20))
-```
-
 Modify `python/tools/kernel_count.py` to output the use of kernels in decending order:
 ```python
 def main():
@@ -211,6 +200,17 @@ def main():
     with open('ordered_kernel.txt', 'w', encoding='utf-8') as ord_file:
         for name, count in sorted_kernels:
             ord_file.write(f"{name} : {count}\n")
+```
+
+Import `torch.autograd.profiler` to measure the time and memory consumption of the model’s operators, see `yolov5/val.py`.
+```python
+import torch.autograd.profiler as profiler
+
+# in function run
+with profiler.profile(with_stack=True, profile_memory=True) as prof:
+        for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
+                ...
+print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=20))
 ```
 
 Run the valuation process:
@@ -379,6 +379,59 @@ enumerate(DataLoader)#_MultiProcessingDataLoaderIter...         6.48%     207.15
 -------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ---------------------------------------------------------------------------  
 Self CPU time total: 3.196s
 ```
+
+Alternative: Use `torch.profiler` to measure the consumption of the operators in CUDA:
+```python
+from torch.profiler import profile, record_function, ProfilerActivity
+
+# in function run
+if torch.cuda.is_available():
+    device_prof = 'cuda'
+activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+sort_by_keyword = device_prof + "_time_total"
+with profile(activities=activities, record_shapes=True) as prof:
+    for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
+        ...
+print(prof.key_averages().table(sort_by=sort_by_keyword, row_limit=20))
+```
+
+Run the valuation process:
+```bash
+python pytorch/tools/kernel_count/kernel_count.py yolov5/val.py --weights yolov5s.pt --data coco128.yaml --img 640
+```
+
+The output of profiler is in `run.log`:
+```
+---------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                             Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+---------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                 aten::as_strided         4.29%     185.659ms         4.29%     185.659ms       3.566us        2.554s        65.59%        2.554s      49.054us         52070  
+                     aten::select        10.33%     446.808ms        12.45%     538.581ms      18.617us  -688540.000us       -17.68%     806.382ms      27.874us         28930  
+                aten::convolution         0.09%       3.882ms        15.23%     658.905ms       2.745ms     221.004ms         5.68%     504.186ms       2.101ms           240  
+                     aten::conv2d         0.10%       4.540ms        15.33%     663.445ms       2.764ms   -4503.000us        -0.12%     499.683ms       2.082ms           240  
+                      aten::silu_         0.13%       5.619ms         0.13%       5.619ms      24.645us     475.705ms        12.22%     475.705ms       2.086ms           228  
+                      aten::slice         5.80%     251.099ms         6.90%     298.490ms      25.516us  -198299.000us        -5.09%     378.770ms      32.379us         11698  
+          aten::_nnpack_available         0.00%     203.000us         0.00%     203.000us       0.846us     354.374ms         9.10%     354.374ms       1.477ms           240  
+                      aten::copy_         8.97%     387.936ms         8.97%     387.936ms      54.242us     332.580ms         8.54%     332.580ms      46.502us          7152  
+              aten::empty_strided         1.10%      47.401ms         1.10%      47.401ms      10.327us     330.527ms         8.49%     330.527ms      72.010us          4590  
+                         aten::to         1.22%      52.665ms        12.77%     552.648ms     105.831us      41.217ms         1.06%     322.877ms      61.830us          5222  
+                      aten::empty         1.45%      62.523ms         1.45%      62.523ms      10.677us     305.403ms         7.84%     305.403ms      52.152us          5856  
+               aten::_convolution         0.21%       9.148ms        15.14%     655.023ms       2.729ms  -289448.000us        -7.43%     283.182ms       1.180ms           240  
+                   aten::_to_copy         3.89%     168.415ms        11.56%     499.983ms     126.835us  -236907.000us        -6.08%     281.660ms      71.451us          3942  
+                aten::bitwise_and         1.16%      50.228ms         1.16%      50.228ms      39.863us     274.207ms         7.04%     274.207ms     217.625us          1260  
+                    aten::__and__         0.38%      16.299ms         1.54%      66.527ms      52.799us  -45228.000us        -1.16%     228.979ms     181.729us          1260  
+                        aten::cat         5.77%     249.698ms         8.83%     382.039ms     129.024us     116.034ms         2.98%     227.192ms      76.728us          2961  
+                aten::thnn_conv2d         0.08%       3.556ms        14.92%     645.672ms       2.690ms     215.832ms         5.54%     218.256ms     909.400us           240  
+                      aten::where         1.01%      43.728ms         9.44%     408.256ms     294.557us      76.826ms         1.97%     190.974ms     137.788us          1386  
+                         aten::ge         1.16%      50.001ms         1.16%      50.001ms      39.683us     190.393ms         4.89%     190.393ms     151.106us          1260  
+                  aten::unsqueeze         1.41%      60.999ms         1.74%      75.125ms      16.417us  -116251.000us        -2.99%     188.219ms      41.132us          4576  
+---------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 4.327s
+Self CUDA time total: 3.894s
+```
+
+
+
 
 # Kernel Survey
 1. [`slow_cov2d_cuda`](pytorch/aten/src/ATen/native/cuda/ConvolutionMM2d.cu)
