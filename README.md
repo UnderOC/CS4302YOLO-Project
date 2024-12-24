@@ -435,5 +435,6 @@ Self CUDA time total: 3.894s
 
 # Kernel Survey
 1. [`slow_cov2d_cuda`](pytorch/aten/src/ATen/native/cuda/ConvolutionMM2d.cu)
-
+2. [`silu_cuda`](pytorch/aten/src/ATen/native/cuda/Activation.cu)
+3. [`cat_out_cuda`](pytorch/aten/src/ATen/native/cuda/Shape.cu)
 
