@@ -172,7 +172,7 @@ python val.py --weights yolov5s.pt --data coco128.yaml --img 640
 ```
 
 ## Run with Profiler and Kernel Count
-Modify `python/tools/kernel_count.py` to output the use of kernels in decending order:
+Modify `pytorch/tools/kernel_count/kernel_count.py` to output the use of kernels in decending order:
 ```python
 def main():
     # Execute the provided Python script and redirect output to run.log

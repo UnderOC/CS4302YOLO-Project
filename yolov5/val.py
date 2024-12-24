@@ -341,7 +341,9 @@ def run(
     # ) as prof:
     activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
     sort_by_keyword = "self_" + device_prof + "_time_total"
-    with profile(activities=activities, record_shapes=True) as prof:
+    # if True:
+    #     prof = None
+    with profile(activities=activities, record_shapes=True, with_stack=True) as prof:
         for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
             callbacks.run("on_val_batch_start")
             with dt[0]:
@@ -414,8 +416,10 @@ def run(
 
             callbacks.run("on_val_batch_end", batch_i, im, targets, paths, shapes, preds)
 
-    with open("profile_results.txt", "w") as file:
-        file.write(str(prof.key_averages().table(sort_by=sort_by_keyword, row_limit=20)))
+        
+    if prof is not None:
+        with open("profile_results.txt", "w") as file:
+            file.write(str(prof.key_averages().table(sort_by=sort_by_keyword, row_limit=20)))
     # print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=40))
     # print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=20))
 
