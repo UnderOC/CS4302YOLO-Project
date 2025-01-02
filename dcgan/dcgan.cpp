@@ -34,6 +34,8 @@ int main() {
         {1, 3, 16, 16},
         {2, 2, 8, 8},
         {3, 4, 32, 32},
+        {12, 40, 128, 128},
+        {13, 41, 129, 129},
     };
 
     for (size_t i = 0; i < dtypes.size(); ++i) {
@@ -76,9 +78,9 @@ int main() {
         }
     }
 
-    if(true){
-        return 0;
-    }
+    // if(true){
+    //     return 0;
+    // }
 
     // Performance measurement with large input
     int large_batch = 16;
