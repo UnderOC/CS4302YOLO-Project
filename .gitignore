@@ -9,9 +9,7 @@ log/
 
 datasets
 *.zip
-*.txt
 *.pt
 *.jpg
-*.txt
 *cache*
 *.log

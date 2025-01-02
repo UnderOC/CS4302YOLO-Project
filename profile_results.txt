@@ -1,0 +1,26 @@
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                       Memcpy DtoH (Device -> Pageable)         0.00%       0.000us         0.00%       0.000us       0.000us     367.211ms        43.61%     367.211ms      53.867us          6817  
+                             aten::_slow_conv2d_forward         5.94%     326.254ms        13.83%     759.088ms       3.163ms     291.080ms        34.57%     309.142ms       1.288ms           240  
+                                 ampere_sgemm_128x32_nn         0.00%       0.000us         0.00%       0.000us       0.000us      80.746ms         9.59%      80.746ms      28.037us          2880  
+void at::native::im2col_kernel<float>(long, float co...         0.00%       0.000us         0.00%       0.000us       0.000us      59.742ms         7.09%      59.742ms      25.930us          2304  
+                                            aten::copy_         3.71%     203.850ms        16.16%     887.348ms     124.070us      58.619ms         6.96%      58.619ms       8.196us          7152  
+void cutlass::Kernel<cutlass_80_simt_sgemm_128x64_8x...         0.00%       0.000us         0.00%       0.000us       0.000us      46.638ms         5.54%      46.638ms      35.547us          1312  
+                                            aten::silu_         0.15%       8.253ms         0.19%      10.536ms      46.211us      34.409ms         4.09%      34.409ms     150.917us           228  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      34.409ms         4.09%      34.409ms     150.917us           228  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us      31.602ms         3.75%      31.602ms       9.576us          3300  
+                                              aten::cat         5.11%     280.391ms         7.54%     413.997ms     139.817us      29.196ms         3.47%      29.196ms       9.860us          2961  
+                                 ampere_sgemm_128x64_nn         0.00%       0.000us         0.00%       0.000us       0.000us      25.032ms         2.97%      25.032ms      65.188us           384  
+                        ampere_sgemm_64x32_sliced1x4_nn         0.00%       0.000us         0.00%       0.000us       0.000us      24.363ms         2.89%      24.363ms      22.392us          1088  
+                        ampere_sgemm_32x32_sliced1x4_nn         0.00%       0.000us         0.00%       0.000us       0.000us      21.994ms         2.61%      21.994ms      14.319us          1536  
+                                          aten::nonzero         3.27%     179.593ms         9.78%     537.213ms     283.340us      18.913ms         2.25%      18.913ms       9.975us          1896  
+                                  ampere_sgemm_64x64_nn         0.00%       0.000us         0.00%       0.000us       0.000us      18.819ms         2.23%      18.819ms      45.238us           416  
+void at::native::(anonymous namespace)::CatArrayBatc...         0.00%       0.000us         0.00%       0.000us       0.000us      12.627ms         1.50%      12.627ms     242.827us            52  
+                                            aten::index         5.28%     289.802ms        11.48%     630.338ms     179.175us      12.319ms         1.46%      15.407ms       4.379us          3518  
+void splitKreduce_kernel<32, 16, int, float, float, ...         0.00%       0.000us         0.00%       0.000us       0.000us      12.285ms         1.46%      12.285ms       6.855us          1792  
+void at::native::index_elementwise_kernel<128, 4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      11.810ms         1.40%      11.810ms       3.624us          3259  
+                         Memcpy HtoD (Pinned -> Device)         0.00%       0.000us         0.00%       0.000us       0.000us      10.959ms         1.30%      10.959ms       1.370ms             8  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 5.490s
+Self CUDA time total: 842.085ms

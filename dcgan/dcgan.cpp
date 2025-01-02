@@ -85,7 +85,7 @@ int main() {
     // Performance measurement with large input
     int large_batch = 16;
     int large_channels = 64;
-    int large_size = 512;
+    int large_size = 256;
 
     at::Tensor large_self = at::rand({large_batch, large_channels, large_size, large_size}, at::dtype(at::kFloat).device(device));
     at::Tensor large_weight = at::rand({32, large_channels, 13, 13}, at::dtype(at::kFloat).device(device));
