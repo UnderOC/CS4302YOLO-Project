@@ -23,6 +23,10 @@ double measure_time_cuda(const std::function<void()>& func) {
 }
 
 int main() {
+    // Set CUDA device to 1
+    cudaSetDevice(1); // Use cuda:1
+    torch::Device device(torch::kCUDA, 1); // Use cuda:1 for PyTorch tensors
+
     // List of dtypes to test
     std::vector<at::ScalarType> dtypes = {at::kFloat, at::kDouble};
 
@@ -43,9 +47,9 @@ int main() {
         auto dtype_str = dtype_strings[i];
 
         for (auto shape : shapes) {
-            // Create input tensors with random values
-            at::Tensor self = at::rand(shape, at::device(at::DeviceType::CUDA).dtype(dtype));
-            at::Tensor weight = at::rand({2, shape[1], 5, 5}, at::device(at::DeviceType::CUDA).dtype(dtype));
+            // Create input tensors with random values on cuda:1
+            at::Tensor self = at::rand(shape, at::dtype(dtype).device(device));
+            at::Tensor weight = at::rand({2, shape[1], 5, 5}, at::dtype(dtype).device(device));
 
             // Convolution parameters
             std::vector<int64_t> k = {5, 5}, st = {1, 1}, p = {2, 2};
@@ -78,19 +82,17 @@ int main() {
         }
     }
 
-    // if(true){
-    //     return 0;
-    // }
-
     // Performance measurement with large input
     int large_batch = 16;
     int large_channels = 64;
-    int large_size = 256;
+    int large_size = 512;
 
-    at::Tensor large_self = at::rand({large_batch, large_channels, large_size, large_size}, at::device(at::DeviceType::CUDA).dtype(at::kFloat));
-    at::Tensor large_weight = at::rand({32, large_channels, 7, 7}, at::device(at::DeviceType::CUDA).dtype(at::kFloat));
+    at::Tensor large_self = at::rand({large_batch, large_channels, large_size, large_size}, at::dtype(at::kFloat).device(device));
+    at::Tensor large_weight = at::rand({32, large_channels, 13, 13}, at::dtype(at::kFloat).device(device));
+    
+    std::cout << "Tensor device: " << large_self.device() << std::endl;
 
-    std::vector<int64_t> large_k = {7, 7}, large_st = {1, 1}, large_p = {3, 3};
+    std::vector<int64_t> large_k = {13, 13}, large_st = {1, 1}, large_p = {6, 6};
     at::IntArrayRef large_kernel_size(large_k);
     at::IntArrayRef large_stride(large_st);
     at::IntArrayRef large_padding(large_p);
