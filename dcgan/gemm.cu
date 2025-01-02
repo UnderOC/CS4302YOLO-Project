@@ -17,6 +17,7 @@ __global__ void gemm_kernel(
 
   scalar_t sum = 0;
 
+  #pragma unroll
   for (int t = 0; t < (K + BLOCKSIZE - 1) / BLOCKSIZE; ++t) {
     if (row < M && t * BLOCKSIZE + threadIdx.x < K)
       tile_A[threadIdx.y][threadIdx.x] = A[row * K + t * BLOCKSIZE + threadIdx.x];
@@ -70,56 +71,85 @@ void cpu_gemm(
       for (int64_t k = 0; k < K; ++k) {
         sum += A[i * lda + k] * B[k * ldb + j];
       }
-      C[i * ldc + j] = alpha * sum + beta * C[i * ldc + j];
+      C[i * ldc + j] += alpha * sum + beta * C[i * ldc + j];
     }
   }
 }
 
-// Test function
+// Function to measure average execution time in nanoseconds
+// template <typename Func>
+// double measure_time_ns(Func func, int repeats = 10) {
+//     double total_duration = 0;
+//     for (int i = 0; i < repeats; ++i) {
+//         auto start = std::chrono::high_resolution_clock::now();
+//         func();
+//         auto end = std::chrono::high_resolution_clock::now();
+//         total_duration += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+//     }
+//     return total_duration / repeats; // Return average time in nanoseconds
+// }
+
+double measure_time_ns(const std::function<void()>& func, int repeat=10) {
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start, 0);
+    for (int i =0;i<repeat;i++){
+      func();
+    }
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    double nanoseconds = milliseconds * 1e6;
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+    return nanoseconds;
+}
+
 void test_gemm(int64_t M, int64_t N, int64_t K) {
-  // Create random matrices on CPU
-  auto A_cpu = torch::rand({M, K}, torch::kFloat32);
-  auto B_cpu = torch::rand({K, N}, torch::kFloat32);
-  auto C_cpu = torch::zeros({M, N}, torch::kFloat32);
+    // Create random matrices on CPU
+    auto A_cpu = torch::rand({M, K}, torch::kFloat32);
+    auto B_cpu = torch::rand({K, N}, torch::kFloat32);
+    auto C_cpu = torch::zeros({M, N}, torch::kFloat32);
 
-  // Copy matrices to GPU
-  auto A_gpu = A_cpu.to(torch::kCUDA);
-  auto B_gpu = B_cpu.to(torch::kCUDA);
-  auto C_gpu = C_cpu.to(torch::kCUDA);
+    // Copy matrices to GPU
+    cudaSetDevice(1); // Use cuda:1
+    auto A_gpu = A_cpu.to(torch::kCUDA);
+    auto B_gpu = B_cpu.to(torch::kCUDA);
+    auto C_gpu = C_cpu.to(torch::kCUDA);
 
-  // Perform CPU GEMM
-  auto start_cpu = std::chrono::high_resolution_clock::now();
-  cpu_gemm<float>(
-      M, N, K,
-      1.0f, A_cpu.data_ptr<float>(), K,
-      B_cpu.data_ptr<float>(), N,
-      0.0f, C_cpu.data_ptr<float>(), N);
-  auto end_cpu = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> cpu_duration = end_cpu - start_cpu;
-  std::cout << "CPU GEMM time: " << cpu_duration.count() << " seconds\n";
+    // Perform CPU GEMM
+    double cpu_time_ns = measure_time_ns([&]() {
+        cpu_gemm<float>(
+            M, N, K,
+            1.0f, A_cpu.data_ptr<float>(), K,
+            B_cpu.data_ptr<float>(), N,
+            0.0f, C_cpu.data_ptr<float>(), N);
+    });
+    std::cout << "CPU GEMM average time: " << cpu_time_ns << " ns\n";
 
-  // Perform GPU GEMM
-  auto start_gpu = std::chrono::high_resolution_clock::now();
-  custom_gemm<float>(
-      M, N, K,
-      1.0f, A_gpu.data_ptr<float>(), K,
-      B_gpu.data_ptr<float>(), N,
-      0.0f, C_gpu.data_ptr<float>(), N);
-  cudaDeviceSynchronize(); // Ensure GPU computation is complete
-  auto end_gpu = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> gpu_duration = end_gpu - start_gpu;
-  std::cout << "GPU GEMM time: " << gpu_duration.count() << " seconds\n";
+    // Perform GPU GEMM
+    double gpu_time_ns = measure_time_ns([&]() {
+        custom_gemm<float>(
+            M, N, K,
+            1.0f, A_gpu.data_ptr<float>(), K,
+            B_gpu.data_ptr<float>(), N,
+            0.0f, C_gpu.data_ptr<float>(), N);
+        cudaDeviceSynchronize(); // Ensure GPU computation is complete
+    });
+    std::cout << "GPU GEMM average time: " << gpu_time_ns << " ns\n";
 
-  // Copy GPU result back to CPU
-  auto C_gpu_cpu = C_gpu.to(torch::kCPU);
+    // Copy GPU result back to CPU
+    auto C_gpu_cpu = C_gpu.to(torch::kCPU);
 
-  // Compare CPU and GPU results
-  bool equal = torch::allclose(C_cpu, C_gpu_cpu, 1e-4, 1e-4);
-  if (equal) {
-    std::cout << "[[[   Results are equal.   ]]]\n";
-  } else {
-    std::cerr << "[[[   Results are NOT equal.   ]]]\n";
-  }
+    // Compare CPU and GPU results
+    bool equal = torch::allclose(C_cpu, C_gpu_cpu, 1e-4, 1e-4);
+    if (equal) {
+        std::cout << "[[[   Results are equal.   ]]]\n";
+    } else {
+        std::cerr << "[[[   Results are NOT equal.   ]]]\n";
+    }
 }
 
 int main() {
@@ -128,8 +158,8 @@ int main() {
   test_gemm(16, 16, 16);
 
   // Test with larger matrices
-  std::cout << "\nTesting with larger matrices (M=1024, N=1024, K=1024):\n";
-  test_gemm(1024, 1024, 1024);
+  std::cout << "\nTesting with larger matrices (M=1024, N=512, K=512):\n";
+  test_gemm(1024, 512, 512);
 
   return 0;
 }
