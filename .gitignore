@@ -4,7 +4,7 @@ datasets/
 vision/
 yolov5/runs/
 log/
-
+*build*
 
 datasets
 *.zip
