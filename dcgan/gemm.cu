@@ -2,47 +2,83 @@
 #include <iostream>
 #include <chrono>
 
-#define BLOCKSIZE 16
+#define BLOCKSIZE 8
+#define VECTOR_SIZE 4 // Use float4 for vectorized access (4 elements per transaction)
 
-// Custom GEMM kernel
 template <typename scalar_t>
 __global__ void gemm_kernel(
     const scalar_t* A, const scalar_t* B, scalar_t* C,
     int64_t M, int64_t N, int64_t K) {
-  __shared__ scalar_t tile_A[BLOCKSIZE][BLOCKSIZE];
-  __shared__ scalar_t tile_B[BLOCKSIZE][BLOCKSIZE];
+  // Shared memory for tiles of A and B
+  __shared__ scalar_t tile_A[BLOCKSIZE][BLOCKSIZE * VECTOR_SIZE];
+  __shared__ scalar_t tile_B[BLOCKSIZE][BLOCKSIZE * VECTOR_SIZE];
 
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  // Thread indices
+  int row = blockIdx.y * BLOCKSIZE + threadIdx.y;
+  int col = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
-  scalar_t sum = 0;
+  // Accumulator for the result
+  scalar_t sum[VECTOR_SIZE] = {0};
 
+  // Loop over tiles of A and B
   #pragma unroll
-  for (int t = 0; t < (K + BLOCKSIZE - 1) / BLOCKSIZE; ++t) {
-    if (row < M && t * BLOCKSIZE + threadIdx.x < K)
-      tile_A[threadIdx.y][threadIdx.x] = A[row * K + t * BLOCKSIZE + threadIdx.x];
-    else
-      tile_A[threadIdx.y][threadIdx.x] = 0;
+  for (int t = 0; t < (K + BLOCKSIZE * VECTOR_SIZE - 1) / (BLOCKSIZE * VECTOR_SIZE); ++t) {
+    // Load a tile of A into shared memory
+    int a_col = t * BLOCKSIZE * VECTOR_SIZE + threadIdx.x * VECTOR_SIZE;
+    if (row < M) {
+      #pragma unroll
+      for (int v = 0; v < VECTOR_SIZE; ++v) {
+        if (a_col + v < K) {
+          tile_A[threadIdx.y][threadIdx.x * VECTOR_SIZE + v] = A[row * K + a_col + v];
+        } else {
+          tile_A[threadIdx.y][threadIdx.x * VECTOR_SIZE + v] = 0;
+        }
+      }
+    } else {
+      #pragma unroll
+      for (int v = 0; v < VECTOR_SIZE; ++v) {
+        tile_A[threadIdx.y][threadIdx.x * VECTOR_SIZE + v] = 0;
+      }
+    }
 
-    if (col < N && t * BLOCKSIZE + threadIdx.y < K)
-      tile_B[threadIdx.y][threadIdx.x] = B[(t * BLOCKSIZE + threadIdx.y) * N + col];
-    else
-      tile_B[threadIdx.y][threadIdx.x] = 0;
+    // Load a tile of B into shared memory
+    int b_row = t * BLOCKSIZE * VECTOR_SIZE + threadIdx.y * VECTOR_SIZE;
+    if (col < N) {
+      #pragma unroll
+      for (int v = 0; v < VECTOR_SIZE; ++v) {
+        if (b_row + v < K) {
+          tile_B[threadIdx.y][threadIdx.x * VECTOR_SIZE + v] = B[(b_row + v) * N + col];
+        } else {
+          tile_B[threadIdx.y][threadIdx.x * VECTOR_SIZE + v] = 0;
+        }
+      }
+    } else {
+      #pragma unroll
+      for (int v = 0; v < VECTOR_SIZE; ++v) {
+        tile_B[threadIdx.y][threadIdx.x * VECTOR_SIZE + v] = 0;
+      }
+    }
 
     __syncthreads();
 
-    #pragma unroll
+    // Compute the partial sum for this tile
     for (int i = 0; i < BLOCKSIZE; ++i) {
-      sum += tile_A[threadIdx.y][i] * tile_B[i][threadIdx.x];
+      #pragma unroll
+      for (int v = 0; v < VECTOR_SIZE; ++v) {
+        sum[v] += tile_A[threadIdx.y][i * VECTOR_SIZE + v] * tile_B[i][threadIdx.x * VECTOR_SIZE + v];
+      }
     }
+
     __syncthreads();
   }
 
+  // Write the result to C
   if (row < M && col < N) {
-    C[row * N + col] += sum;
+    for (int v = 0; v < VECTOR_SIZE; ++v) {
+      C[row * N + col] += sum[v];
+    }
   }
 }
-
 // Custom GEMM wrapper
 template <typename scalar_t>
 void custom_gemm(
@@ -154,8 +190,8 @@ void test_gemm(int64_t M, int64_t N, int64_t K) {
 
 int main() {
   // Test with small matrices
-  std::cout << "Testing with small matrices (M=16, N=16, K=16):\n";
-  test_gemm(16, 16, 16);
+  std::cout << "Testing with small matrices (M=19, N=37, K=71):\n";
+  test_gemm(19, 37, 71);
 
   // Test with larger matrices
   std::cout << "\nTesting with larger matrices (M=1024, N=512, K=512):\n";
