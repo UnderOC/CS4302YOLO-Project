@@ -124,6 +124,68 @@ Tensor new_view_weight_MM2d(const Tensor& weight_) {
 
 /** ****************    Working Area   ************* */
 
+
+#define BLOCKSIZE 16
+
+// Custom GEMM implementation
+template <typename scalar_t>
+__global__ void gemm_kernel(
+    const scalar_t* A, const scalar_t* B, scalar_t* C,
+    int64_t M, int64_t N, int64_t K) {
+  // Shared memory for A and B tiles
+  __shared__ scalar_t tile_A[BLOCKSIZE][BLOCKSIZE];
+  __shared__ scalar_t tile_B[BLOCKSIZE][BLOCKSIZE];
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  scalar_t sum = 0;
+
+  for (int t = 0; t < (K + BLOCKSIZE - 1) / BLOCKSIZE; ++t) {
+    if (row < M && t * BLOCKSIZE + threadIdx.x < K)
+      tile_A[threadIdx.y][threadIdx.x] = A[row * K + t * BLOCKSIZE + threadIdx.x];
+    else
+      tile_A[threadIdx.y][threadIdx.x] = 0;
+
+    if (col < N && t * BLOCKSIZE + threadIdx.y < K)
+      tile_B[threadIdx.y][threadIdx.x] = B[(t * BLOCKSIZE + threadIdx.y) * N + col];
+    else
+      tile_B[threadIdx.y][threadIdx.x] = 0;
+
+    __syncthreads();
+
+    #pragma unroll
+    for (int i = 0; i < BLOCKSIZE; ++i) {
+      sum += tile_A[threadIdx.y][i] * tile_B[i][threadIdx.x];
+    }
+    __syncthreads();
+  }
+
+  if (row < M && col < N) {
+    C[row * N + col] += sum;
+  }
+}
+
+template <typename scalar_t>
+void custom_gemm(
+    int64_t M, int64_t N, int64_t K,
+    scalar_t alpha, const scalar_t* A, int64_t lda,
+    const scalar_t* B, int64_t ldb,
+    scalar_t beta, scalar_t* C, int64_t ldc) {
+  printf("Custom GEMM\n");
+  printf("M:%d, N:%d, K:%d\n", M, N, K);
+  printf("lda:%d, ldb:%d, ldc:%d\n", lda, ldb, ldc);
+  printf("alpha:%f, beta:%f\n", alpha, beta);
+
+  dim3 blockDim(BLOCKSIZE, BLOCKSIZE);
+  dim3 gridDim((N + BLOCKSIZE - 1) / BLOCKSIZE, (M + BLOCKSIZE - 1) / BLOCKSIZE);
+
+  gemm_kernel<<<gridDim, blockDim, 0, c10::cuda::getCurrentCUDAStream()>>>(
+      A, B, C, M, N, K);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+
 void our_conv2d_forward(
     const Tensor &input,
     const Tensor &output,
@@ -209,64 +271,6 @@ void our_conv2d_forward(
           output_n.data_ptr<scalar_t>(), n);
     }
   });
-}
-
-// Custom GEMM implementation
-template <typename scalar_t>
-__global__ void gemm_kernel(
-    const scalar_t* A, const scalar_t* B, scalar_t* C,
-    int64_t M, int64_t N, int64_t K) {
-  // Shared memory for A and B tiles
-  __shared__ scalar_t tile_A[32][32];
-  __shared__ scalar_t tile_B[32][32];
-
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-  scalar_t sum = 0;
-
-  for (int t = 0; t < (K + 31) / 32; ++t) {
-    if (row < M && t * 32 + threadIdx.x < K)
-      tile_A[threadIdx.y][threadIdx.x] = A[row * K + t * 32 + threadIdx.x];
-    else
-      tile_A[threadIdx.y][threadIdx.x] = 0;
-
-    if (col < N && t * 32 + threadIdx.y < K)
-      tile_B[threadIdx.y][threadIdx.x] = B[(t * 32 + threadIdx.y) * N + col];
-    else
-      tile_B[threadIdx.y][threadIdx.x] = 0;
-
-    __syncthreads();
-
-    #pragma unroll
-    for (int i = 0; i < 32; ++i) {
-      sum += tile_A[threadIdx.y][i] * tile_B[i][threadIdx.x];
-    }
-    __syncthreads();
-  }
-
-  if (row < M && col < N) {
-    C[row * N + col] += sum;
-  }
-}
-
-template <typename scalar_t>
-void custom_gemm(
-    int64_t M, int64_t N, int64_t K,
-    scalar_t alpha, const scalar_t* A, int64_t lda,
-    const scalar_t* B, int64_t ldb,
-    scalar_t beta, scalar_t* C, int64_t ldc) {
-  printf("Custom GEMM\n");
-  printf("M:%d, N:%d, K:%d\n", M, N, K);
-  printf("lda:%d, ldb:%d, ldc:%d\n", lda, ldb, ldc);
-  printf("alpha:%f, beta:%f\n", alpha, beta);
-
-  dim3 blockDim(32, 32);
-  dim3 gridDim((N + 31) / 32, (M + 31) / 32);
-
-  gemm_kernel<<<gridDim, blockDim, 0, c10::cuda::getCurrentCUDAStream()>>>(
-      A, B, C, M, N, K);
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
 

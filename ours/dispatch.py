@@ -13,7 +13,7 @@ if not os.path.exists(RootDir):
 
 mapping = {
     CurDir+"/native_functions.yaml":RootDir+"pytorch/aten/src/ATen/native/native_functions.yaml", 
-    CurDir+"/OurConv2d.cu":RootDir+"pytorch/aten/src/ATen/native/OurConv2d.cu",
+    CurDir+"/OurConv2d.cu":RootDir+"pytorch/aten/src/ATen/native/cuda/OurConv2d.cu",
 }
 
 
