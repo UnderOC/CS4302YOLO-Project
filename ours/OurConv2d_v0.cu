@@ -81,6 +81,21 @@ void our_conv2d_shape_check(
     if (w_sizes.size() == 2) {
       nInputPlane /= (kH * kW);
     }
+    printf("w_sizes: ");
+    for (int i = 0; i < w_sizes.size(); i++) {
+      printf("%" PRId64 " ", w_sizes[i]);
+    }
+    printf("\n");
+
+    printf("nInputPlane: %" PRId64 "\n", nInputPlane);
+    printf("kH: %" PRId64 "\n", kH);
+    printf("kW: %" PRId64 "\n", kW);
+    printf("in_sizes: ");
+    for (int i = 0; i < in_sizes.size(); i++) {
+      printf("%" PRId64 " ", in_sizes[i]);
+    }
+    printf("\n");
+    printf("in_sizes[dimf]: %" PRId64 "\n", in_sizes[dimf]);
     TORCH_CHECK(in_sizes[dimf] == nInputPlane,
                 "Expected input dim ", dimf, " to have size ", nInputPlane,
                 " but got ", in_sizes[dimf]);
@@ -122,9 +137,6 @@ Tensor new_view_weight_MM2d(const Tensor& weight_) {
   return weight->view({s1, s2});
 }
 
-/** ****************    Working Area   ************* */
-
-
 void our_conv2d_forward(
            const Tensor &input,
            const Tensor &output,
@@ -136,6 +148,24 @@ void our_conv2d_forward(
   auto weight = new_view_weight_MM2d(weight_);
   our_conv2d_shape_check(
       input, {}, weight, bias, kH, kW, dH, dW, padH, padW, /*weight_nullable*/false);
+
+  printf("Input: ");
+  printf("\tDimension: %" PRId64 "\n", input.dim());
+  for (int i = 0; i < input.dim(); i++) {
+    printf("\tSize: %" PRId64 "\n", input.size(i));
+  }
+
+  printf("weight: ");
+  for (int i = 0; i < weight.sizes().size(); i++) {
+    printf("%" PRId64 " ", weight.sizes()[i]);
+  }
+  printf("\n");
+
+  printf("bias: ");
+  for (int i = 0; i < bias.sizes().size(); i++) {
+    printf("%" PRId64 " ", bias.sizes()[i]);
+  }
+  printf("\n");
 
 
   constexpr int dimf = 1;
@@ -153,7 +183,11 @@ void our_conv2d_forward(
 
   // Resize output
   resize_output(output, {batchSize, nOutputPlane, outputHeight, outputWidth});
-
+  printf("Output: ");
+  printf("\tDimension: %" PRId64 "\n", output.dim());
+  for (int i = 0; i < output.dim(); i++) {
+    printf("\tSize: %" PRId64 "\n", output.size(i));
+  }
 
   // Create temporary columns
   auto columns = at::empty({nInputPlane * kW * kH, outputHeight * outputWidth}, input.options());
@@ -213,13 +247,6 @@ void our_conv2d_forward(
     }
   });
 }
-
-
-
-
-
-
-/** ****************    Working Area   ************* */
 
 void our_conv2d_backward(
     const Tensor &input,
