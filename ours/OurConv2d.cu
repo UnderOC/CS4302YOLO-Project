@@ -173,9 +173,9 @@ void custom_gemm(
     const scalar_t* B, int64_t ldb,
     scalar_t beta, scalar_t* C, int64_t ldc) {
   printf("Custom GEMM\n");
-  printf("M:%d, N:%d, K:%d\n", M, N, K);
-  printf("lda:%d, ldb:%d, ldc:%d\n", lda, ldb, ldc);
-  printf("alpha:%f, beta:%f\n", alpha, beta);
+  printf("M:%d, N:%d, K:%d\n", (int)M, (int)N, (int)K);
+  printf("lda:%d, ldb:%d, ldc:%d\n", (int)lda, (int)ldb, (int)ldc);
+  printf("alpha:%f, beta:%f\n", (float)alpha, (float)beta);
 
   dim3 blockDim(BLOCKSIZE, BLOCKSIZE);
   dim3 gridDim((N + BLOCKSIZE - 1) / BLOCKSIZE, (M + BLOCKSIZE - 1) / BLOCKSIZE);
