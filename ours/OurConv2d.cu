@@ -185,6 +185,94 @@ void custom_gemm(
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
+// Optimized im2col
+template <typename dt>
+C10_LAUNCH_BOUNDS_1(1024)
+__global__ void our_im2col_kernel(
+    const int64_t n,
+    const dt* data_im, // shape = [channels, height, width]
+    const int64_t height, // input image height
+    const int64_t width, // input image width
+    const int64_t kernel_height,
+    const int64_t kernel_width, 
+    const int64_t pad_height,
+    const int64_t pad_width,
+    const int64_t stride_height,
+    const int64_t stride_width,
+    const int64_t dilation_height,
+    const int64_t dilation_width,
+    const int64_t height_col, // The number of times the kernel moves along the height
+    const int64_t width_col, // The number of times the kernel moves along the width
+    dt* data_col) {
+  CUDA_KERNEL_LOOP(index, n) {
+    // allocate the task to (channels * kernel_height * kernel_width * height_col) num of threads
+    // index = channel_in * ((kernel_height * kernel_width) * height_col) + (idx_h * kernel_width + idx_w) * height_col + h_out
+    int64_t h_out = index % height_col;
+    int64_t idx1 = index / height_col;
+    int64_t idx_w = idx1 % kernel_width;
+    int64_t idx2 = idx1 / kernel_width;
+    int64_t idx_h = idx2 % kernel_height;
+    int64_t channel_in = idx2 / kernel_height;
+
+    int64_t channel_out = channel_in * kernel_height * kernel_width;
+    int64_t h_in = h_out * stride_height - pad_height;
+    int64_t w_in = -pad_width;
+
+    dt* col = data_col + (height_col * width_col) * channel_out +  
+              (height_col * width_col) * (idx_h * kernel_width + idx_w) + width_col * h_out;
+    const dt* im = data_im + (channel_in * height + h_in) * width + w_in;
+
+    int64_t h = h_in + idx_h * dilation_height;
+    for (int64_t i = 0; i < width_col; ++i) {
+        int64_t w = w_in + i * stride_width + idx_w * dilation_width;
+        *col = (h >= 0 && w >= 0 && h < height && w < width)
+            ? im[idx_h * dilation_height * width + i * stride_width + idx_w * dilation_width]
+            : static_cast<dt>(0);
+        col ++;
+    }
+  }
+}
+
+
+template <typename dt>
+void our_im2col(
+    cudaStream_t stream,
+    const dt* data_im,
+    const int64_t channels,
+    const int64_t height,
+    const int64_t width,
+    const int64_t height_col,
+    const int64_t width_col,
+    const int64_t kernel_height,
+    const int64_t kernel_width,
+    const int64_t pad_height,
+    const int64_t pad_width,
+    const int64_t stride_height,
+    const int64_t stride_width,
+    const int64_t dilation_height,
+    const int64_t dilation_width,
+    dt* data_col) {
+  // We are going to launch channels * height_col * kernel_height * kernel_width kernels
+  int64_t num_kernels = channels * height_col * kernel_height * kernel_width;
+  // Launch CUDA_NUM_THREADS = 1024
+  our_im2col_kernel<<<GET_BLOCKS(num_kernels), 1024, 0, stream>>>(
+      num_kernels,
+      data_im,
+      height,
+      width,
+      kernel_height,
+      kernel_width,
+      pad_height,
+      pad_width,
+      stride_height,
+      stride_width,
+      dilation_height,
+      dilation_width,
+      height_col,
+      width_col,
+      data_col);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
 
 void our_conv2d_forward(
     const Tensor &input,
@@ -240,7 +328,7 @@ void our_conv2d_forward(
 
       if (requires_columns) {
         // Extract columns:
-        at::native::im2col(
+        our_im2col(
             c10::cuda::getCurrentCUDAStream(),
             input_n.data_ptr<scalar_t>(),
             nInputPlane, inputHeight, inputWidth,
@@ -262,7 +350,7 @@ void our_conv2d_forward(
           columns.data_ptr<scalar_t>() :
           input_n.data_ptr<scalar_t>();
 
-      custom_gemm<scalar_t>(
+      at::cuda::blas::gemm<scalar_t>(
           m, n, k,
           scalar_t(1),  // alpha
           weight.data_ptr<scalar_t>(), k,
