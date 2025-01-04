@@ -328,6 +328,7 @@ void our_conv2d_forward(
 
       if (requires_columns) {
         // Extract columns:
+        // at::native::im2col(
         our_im2col(
             c10::cuda::getCurrentCUDAStream(),
             input_n.data_ptr<scalar_t>(),
